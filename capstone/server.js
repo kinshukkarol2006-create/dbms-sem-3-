@@ -1,8 +1,7 @@
-require('dotenv').config();
-
 const express = require('express');
 const path = require('node:path');
-const { closeMongoClient, getDatabase } = require('./mongo');
+const { closeMongoClient, getDatabase: getMongoDatabase } = require('./mongo');
+const { ensureSeeded } = require('./seed');
 
 const app = express();
 const port = Number(process.env.PORT) || 3000;
@@ -17,6 +16,12 @@ const statusLabels = {
 };
 const allowedRanges = { '7D': 7, '30D': 30, '90D': 90, '1Y': 365 };
 
+async function getDatabase() {
+  const db = await getMongoDatabase();
+  await ensureSeeded(db);
+  return db;
+}
+
 app.disable('x-powered-by');
 app.use(express.json({ limit: '20kb' }));
 app.get('/', (_request, response) => response.sendFile(path.join(__dirname, 'index.html')));
@@ -26,13 +31,19 @@ app.get('/app.js', (_request, response) => response.sendFile(path.join(__dirname
 function respondWithDatabaseError(response, error, context) {
   console.error(`${context}:`, error);
   const missingUri = error.code === 'MONGODB_URI_MISSING';
-  const unavailable = missingUri || error.name === 'MongoServerSelectionError' || error.name === 'MongoNetworkError';
+  const invalidUri = error.name === 'MongoParseError';
+  const authFailed = error.code === 8000 || error.code === 18 || /auth/i.test(error.message || '');
+  const unavailable = missingUri || invalidUri || authFailed || error.name === 'MongoServerSelectionError' || error.name === 'MongoNetworkError';
   response.status(unavailable ? 503 : 500).json({
     error: missingUri
-      ? 'MONGODB_URI is not configured. Add your MongoDB connection string to the environment.'
-      : unavailable
-        ? 'MongoDB is unavailable. Check MONGODB_URI and allow the server network access in MongoDB Atlas.'
-        : 'The database request could not be completed.',
+      ? 'MONGODB_URI is not configured. Add your MongoDB Atlas connection string in Vercel Environment Variables.'
+      : invalidUri
+        ? 'MONGODB_URI is invalid. Check the MongoDB connection string format in Vercel Environment Variables.'
+        : authFailed
+          ? 'MongoDB authentication failed. Verify the username and password in MONGODB_URI.'
+          : unavailable
+            ? 'MongoDB is unavailable. Check MONGODB_URI and allow 0.0.0.0/0 network access in MongoDB Atlas.'
+            : 'The database request could not be completed.',
   });
 }
 

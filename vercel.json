@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "capstone/server.js",
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": [
+          "capstone/index.html",
+          "capstone/styles.css",
+          "capstone/app.js",
+          "capstone/database.sql"
+        ]
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "capstone/server.js"
+    }
+  ]
+}

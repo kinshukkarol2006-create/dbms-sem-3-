@@ -1,10 +1,19 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const dotenv = require('dotenv');
 const { MongoClient } = require('mongodb');
+
+for (const envPath of [path.join(__dirname, '.env'), path.resolve(__dirname, '..', '.env')]) {
+  if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath });
+  }
+}
 
 let client;
 let clientPromise;
 
 async function getDatabase() {
-  const uri = process.env.MONGODB_URI;
+  const uri = (process.env.MONGODB_URI || '').trim();
   if (!uri) {
     const error = new Error('MONGODB_URI is not configured.');
     error.code = 'MONGODB_URI_MISSING';
@@ -26,7 +35,8 @@ async function getDatabase() {
   }
 
   const connectedClient = await clientPromise;
-  return connectedClient.db(process.env.MONGODB_DB || undefined);
+  const dbName = (process.env.MONGODB_DB || '').trim() || undefined;
+  return connectedClient.db(dbName);
 }
 
 async function closeMongoClient() {
